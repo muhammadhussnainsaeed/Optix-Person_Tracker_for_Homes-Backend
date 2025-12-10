@@ -9,7 +9,7 @@ from schemas import user
 router = APIRouter(tags=["Authentication"])
 
 #Log_in API
-@router.post("/log_in")
+@router.post("/auth/log_in")
 def login(user_data: user.UserLogin, db: Session = Depends(session.get_db)):
     # Find user by username
     query = text("""
@@ -29,7 +29,7 @@ def login(user_data: user.UserLogin, db: Session = Depends(session.get_db)):
         )
 
     # Generate JWT token
-    token = security.create_access_token(subject=user_row["id"])
+    token = security.create_access_token(subject_id=user_row["id"], subject_username= user_data.username)
 
     return {
         "message": "Login successful",
@@ -40,7 +40,7 @@ def login(user_data: user.UserLogin, db: Session = Depends(session.get_db)):
     }
 
 #Sign_up API
-@router.post("/register", status_code=201)
+@router.post("/auth/sign_up", status_code=201)
 def register_user(user_data: user.UserSignup, db: Session = Depends(session.get_db)):
     # Check if username exists
     check_query = text("SELECT 1 FROM users WHERE username = :username")
@@ -83,3 +83,51 @@ def register_user(user_data: user.UserSignup, db: Session = Depends(session.get_
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Internal server error")
+
+#Forget API
+@router.post("/auth/reset_password")
+def reset_password(user_data: user.UserForgetPassword, db: Session = Depends(session.get_db)):
+
+    check_user_query = text("SELECT id,security_question,hashed_security_answer FROM users WHERE username = :username")
+
+    result = db.execute(check_user_query, {"username": user_data.username}).fetchone()
+
+    if not result:
+        raise HTTPException(status_code=400, detail="Username not exists")
+
+
+    if str(result[1]) != user_data.security_question or not security.verify_password(user_data.security_answer,result[2]):
+        raise HTTPException(status_code=400, detail="Information Incorrect")
+
+    hashed_password = security.hash_password(user_data.new_password)
+
+    insert_query = text("""
+        UPDATE users
+        SET
+            hashed_password = :hashed_password
+        WHERE username = :username
+            RETURNING id;
+            """)
+
+    try:
+        result = db.execute(insert_query, {
+            "username": user_data.username,
+            "hashed_password": hashed_password
+        })
+
+        user_id = result.fetchone()[0]
+        db.commit()
+
+        return {
+            "message": "User password updated successfully",
+            "id": str(user_id),
+            "username": user_data.username
+        }
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Updating failed")
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Internal server error")
+

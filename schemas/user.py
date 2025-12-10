@@ -17,6 +17,11 @@ class UserLogin(BaseModel):
 class UserForgetPassword(BaseModel):
     username: str
     security_question: str
-    hashed_security_question: str
+    security_answer: str
     new_password: str
+
+class UserVerification(BaseModel):
+    user_id: str
+    username: str
+    jwt_token: str
 

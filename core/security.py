@@ -14,7 +14,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 36000
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 # --- 1. Create Token (With +5 Offset) ---
-def create_access_token(subject: Union[str, UUID], expires_delta: int = ACCESS_TOKEN_EXPIRE_MINUTES):
+def create_access_token(subject_id: Union[str, UUID],subject_username: str, expires_delta: int = ACCESS_TOKEN_EXPIRE_MINUTES):
     """
     Creates a JWT token using a manual UTC+5 (Pakistan) timezone.
     """
@@ -28,11 +28,12 @@ def create_access_token(subject: Union[str, UUID], expires_delta: int = ACCESS_T
     expire = now_pkt + timedelta(minutes=expires_delta)
 
     # 4. Handle UUID conversion
-    if isinstance(subject, UUID):
-        subject = str(subject)
+    if isinstance(subject_id, UUID):
+        subject = str(subject_id)
 
     to_encode = {
-        "sub": subject,
+        "sub_id": subject,
+        "sub_username": subject_username,
         "exp": expire,
         "iat": now_pkt  # Issued At (Shows +05:00 in the timestamp)
     }
@@ -45,14 +46,14 @@ def create_access_token(subject: Union[str, UUID], expires_delta: int = ACCESS_T
 def verify_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
+        user_username: str = payload.get("sub_username")
 
-        if user_id is None:
+        if user_username is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token missing subject (sub)."
+                detail="Token missing subject (sub_username)."
             )
-        return user_id
+        return user_username
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(
