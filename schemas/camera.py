@@ -5,7 +5,6 @@ class Camera_Detail(BaseModel):
     username: str
     user_id: str
     jwt_token: str
-    is_private: bool
 
 class Create_Camera(BaseModel):
     user_id: str

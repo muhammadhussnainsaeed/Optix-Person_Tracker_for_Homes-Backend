@@ -80,13 +80,12 @@ def add_camera(user_data: camera.Create_Camera, db: Session = Depends(session.ge
     }
 
 @router.get("/camera/details")
-def camera_details(username: str,jwt_token: str, user_id: str, camera_id: str ,is_private: bool,db: Session = Depends(session.get_db)):
+def camera_details(username: str,jwt_token: str, user_id: str, camera_id: str, db: Session = Depends(session.get_db)):
     user_data = camera.Camera_Detail(
         username=username,
         user_id=user_id,
         jwt_token=jwt_token,
-        camera_id=camera_id,
-        is_private= is_private
+        camera_id=camera_id
     )
 
     token_verification = security.verify_token(user_data.jwt_token)
@@ -95,7 +94,7 @@ def camera_details(username: str,jwt_token: str, user_id: str, camera_id: str ,i
         raise HTTPException(status_code=400, detail="Verification Failed")
 
     query = text("""
-            SELECT id, name, location, description, video_url
+            SELECT id, name, location, description, video_url, is_private
             FROM cameras 
             WHERE id = :camera_id AND user_id = :user_id
         """)
@@ -107,7 +106,7 @@ def camera_details(username: str,jwt_token: str, user_id: str, camera_id: str ,i
     camera_detail = result.mappings().fetchone()
 
     final_video_url = camera_detail["video_url"]
-    if is_private:
+    if bool(camera_detail["is_private"]):
         final_video_url = None
 
     return {

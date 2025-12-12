@@ -14,6 +14,7 @@ def unmark_unwanted_person(user_data: unwanted_person.Unmark_Request,db: Session
 
     if user_data.username != token_verification:
         raise HTTPException(status_code=400, detail="Verification Failed")
+
     find_log_query = text("""
                 SELECT person_id 
                 FROM event_logs 

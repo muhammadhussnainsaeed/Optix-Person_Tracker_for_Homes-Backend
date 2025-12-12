@@ -8,12 +8,12 @@ from passlib.context import CryptContext
 # --- CONFIG ---
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 36000
+ACCESS_TOKEN_EXPIRE_MINUTES = 86400
 
 # For Password Hashing
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
-# --- 1. Create Token (With +5 Offset) ---
+# Create Token
 def create_access_token(subject_id: Union[str, UUID],subject_username: str, expires_delta: int = ACCESS_TOKEN_EXPIRE_MINUTES):
     """
     Creates a JWT token using a manual UTC+5 (Pakistan) timezone.
@@ -42,7 +42,7 @@ def create_access_token(subject_id: Union[str, UUID],subject_username: str, expi
     return encoded_jwt
 
 
-# --- 2. Verify Token ---
+# Verify Token ---
 def verify_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -73,12 +73,3 @@ def hash_password(password: str):
 # Function to verify the password
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
-
-
-# --- TEST ---
-# token = create_access_token(subject="ali_123")
-# print(f"Token: {token}")
-#
-# # Just to show you the time it is using:
-# pk_offset = timezone(timedelta(hours=5))
-# print(f"Server Time used: {datetime.now(pk_offset)}")

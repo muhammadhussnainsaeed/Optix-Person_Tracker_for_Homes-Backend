@@ -23,10 +23,7 @@ def login(user_data: user.UserLogin, db: Session = Depends(session.get_db)):
 
     # Check if user exists and password is correct
     if not user_row or not security.verify_password(user_data.password, user_row["hashed_password"]):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid credentials"
-        )
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Generate JWT token
     token = security.create_access_token(subject_id=user_row["id"], subject_username= user_data.username)
@@ -75,10 +72,6 @@ def register_user(user_data: user.UserSignup, db: Session = Depends(session.get_
             "id": str(user_id),
             "username": user_data.username
         }
-
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Registration failed - possible duplicate username")
 
     except Exception:
         db.rollback()

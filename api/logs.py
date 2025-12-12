@@ -65,7 +65,7 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
             LEFT JOIN cameras c ON el.camera_id = c.id
             LEFT JOIN floors f ON c.floor_id = f.id
             WHERE el.user_id = :user_id 
-              AND el.event_type = 'family_member_detected'
+              AND el.event_type = 'family_detected'
             ORDER BY el.detected_at DESC
         """)
 
@@ -86,6 +86,11 @@ def investigate(user_data: logs.InvestigateRequest, db: Session = Depends(sessio
     if user_data.username != token_verification:
         raise HTTPException(status_code=400, detail="Verification Failed")
 
+    if str(user_data.starting_time) == "None":
+        user_data.starting_time = None
+    if str(user_data.ending_time) == "None":
+        user_data.ending_time = None
+
     base_query = """
             SELECT 
                 el.id AS log_id,
@@ -100,57 +105,57 @@ def investigate(user_data: logs.InvestigateRequest, db: Session = Depends(sessio
             LEFT JOIN cameras c ON el.camera_id = c.id
             LEFT JOIN floors f ON c.floor_id = f.id
             WHERE el.user_id = :user_id
-              AND el.detected_at BETWEEN :start_time AND :end_time
         """
 
     # Dictionary to hold parameters
-    query_params = {
-        "user_id": user_data.user_id,
-        "start_time": user_data.starting_time,
-        "end_time": user_data.ending_time
-    }
+    query_params = {"user_id": user_data.user_id}
 
     # 3. Apply Filters Dynamically
 
-    # Filter by Type (Family vs Unwanted)
+    # A. Filter by Type
     if user_data.type == "Family":
         base_query += " AND el.event_type = 'family_detected'"
     elif user_data.type == "Unwanted":
         base_query += " AND el.event_type = 'unwanted_detected'"
-    # If "All", we just don't add any AND condition.
 
-    # Filter by Camera (Room)
-    if user_data.starting_time and user_data.ending_time:
-        # CASE A: Both Start and End -> Use BETWEEN
-        start_dt = parser.parse(str(user_data.starting_time))
-        end_dt = parser.parse(str(user_data.ending_time))
+    # B. Filter by Camera
+    if user_data.camera_id and user_data.camera_id != "All":
+        base_query += " AND el.camera_id = :cid"
+        query_params["cid"] = user_data.camera_id
 
-        base_query += " AND el.detected_at BETWEEN :start AND :end"
-        query_params["start"] = start_dt
-        query_params["end"] = end_dt
+    # C. Filter by Time
+    try:
+        # Now this logic works correctly because ending_time is actually None
+        if user_data.starting_time and user_data.ending_time:
+            # Case 1: Both provided
+            start_dt = parser.parse(str(user_data.starting_time))
+            end_dt = parser.parse(str(user_data.ending_time))
+            base_query += " AND el.detected_at BETWEEN :start AND :end"
+            query_params["start"] = start_dt
+            query_params["end"] = end_dt
 
-    elif user_data.starting_time:
-        # CASE B: Start Only -> Show everything AFTER this date
-        start_dt = parser.parse(str(user_data.starting_time))
+        elif user_data.starting_time:
+            # Case 2: Start Only (This will now run correctly for your input)
+            start_dt = parser.parse(str(user_data.starting_time))
+            base_query += " AND el.detected_at >= :start"
+            query_params["start"] = start_dt
 
-        base_query += " AND el.detected_at >= :start"
-        query_params["start"] = start_dt
+        elif user_data.ending_time:
+            # Case 3: End Only
+            end_dt = parser.parse(str(user_data.ending_time))
+            base_query += " AND el.detected_at <= :end"
+            query_params["end"] = end_dt
 
-    elif user_data.ending_time:
-        # CASE C: End Only -> Show everything BEFORE this date
-        end_dt = parser.parse(str(user_data.ending_time))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format")
 
-        base_query += " AND el.detected_at <= :end"
-        query_params["end"] = end_dt
-
-    # Add Sorting (Newest first)
+    # 4. Sorting
     base_query += " ORDER BY el.detected_at DESC"
 
-    # 4. Execute Query
+    # 5. Execute
     result = db.execute(text(base_query), query_params)
     logs = result.mappings().all()
 
-    # 5. Return Results
     return {
         "message": "Investigation logs fetched successfully",
         "count": len(logs),
@@ -244,9 +249,8 @@ def log_unwanted_person_details(username: str, user_id: str, jwt_token: str, log
             el.detected_at,
             el.exited_at,
             el.snapshot_url,
-            el.description,
             p.name AS person_name,
-            c.location_description AS room_name,
+            c.location AS room_name,
             f.title AS floor_title
         FROM event_logs el
         JOIN persons p ON el.person_id = p.id
