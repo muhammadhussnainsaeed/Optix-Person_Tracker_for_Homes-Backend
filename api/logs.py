@@ -21,16 +21,30 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
                 el.id AS log_id,
                 el.detected_at,
                 el.exited_at,
-                el.snapshot_url,           -- e.g. "Unknown Person detected..."
+                el.snapshot_url,             -- e.g. "Unknown Person detected..."
+                p.id AS person_id,
                 p.name AS person_name,      -- e.g. "Unknown" or a name if you tagged them later
+				p_p.photo_url AS person_photo,
                 c.location AS room_name,
-                f.title AS floor_title
+                f.title AS floor_title,
+				(
+        SELECT json_agg(
+            json_build_object(
+                'object_name', oi.object_name, 
+                'moved_at', oi.moved_at, 
+                'location_data', oi.location_data
+            )
+        )
+        FROM object_interactions oi
+        WHERE oi.event_log_id = el.id
+    ) AS interactions
             FROM event_logs el
             JOIN persons p ON el.person_id = p.id
+			LEFT JOIN person_photos p_p ON p.id = p_p.person_id
             LEFT JOIN cameras c ON el.camera_id = c.id
             LEFT JOIN floors f ON c.floor_id = f.id
             WHERE el.user_id = :user_id
-              AND el.event_type = 'unwanted_detected'
+              AND el.event_type = 'unwanted_detected' AND p_p.is_primary= true
             ORDER BY el.detected_at DESC
         """)
 
@@ -58,14 +72,27 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
                 el.exited_at,
                 el.snapshot_url,             -- e.g. "Unknown Person detected..."
                 p.name AS person_name,      -- e.g. "Unknown" or a name if you tagged them later
+				p_p.photo_url AS person_photo,
                 c.location AS room_name,
-                f.title AS floor_title
+                f.title AS floor_title,
+				(
+        SELECT json_agg(
+            json_build_object(
+                'object_name', oi.object_name, 
+                'moved_at', oi.moved_at, 
+                'location_data', oi.location_data
+            )
+        )
+        FROM object_interactions oi
+        WHERE oi.event_log_id = el.id
+    ) AS interactions
             FROM event_logs el
             JOIN persons p ON el.person_id = p.id
+			LEFT JOIN person_photos p_p ON p.id = p_p.person_id
             LEFT JOIN cameras c ON el.camera_id = c.id
             LEFT JOIN floors f ON c.floor_id = f.id
-            WHERE el.user_id = :user_id 
-              AND el.event_type = 'family_detected'
+            WHERE el.user_id = :user_id
+              AND el.event_type = 'family_detected' AND p_p.is_primary= true
             ORDER BY el.detected_at DESC
         """)
 
@@ -98,13 +125,26 @@ def investigate(user_data: logs.InvestigateRequest, db: Session = Depends(sessio
                 el.snapshot_url,
                 el.event_type,
                 p.name AS person_name,
-                c.description AS room_name,
-                f.title AS floor_title
+				p_p.photo_url AS person_photo,
+                c.location AS room_name,
+                f.title AS floor_title,
+				(
+        SELECT json_agg(
+            json_build_object(
+                'object_name', oi.object_name, 
+                'moved_at', oi.moved_at, 
+                'location_data', oi.location_data
+            )
+        )
+        FROM object_interactions oi
+        WHERE oi.event_log_id = el.id
+    ) AS interactions
             FROM event_logs el
             LEFT JOIN persons p ON el.person_id = p.id
+			LEFT JOIN person_photos p_p ON p.id = p_p.person_id
             LEFT JOIN cameras c ON el.camera_id = c.id
             LEFT JOIN floors f ON c.floor_id = f.id
-            WHERE el.user_id = :user_id
+            WHERE el.user_id = :user_id AND p_p.is_primary= true
         """
 
     # Dictionary to hold parameters
@@ -162,111 +202,111 @@ def investigate(user_data: logs.InvestigateRequest, db: Session = Depends(sessio
         "logs": logs
     }
 
-@router.get("/logs/family_member/details")
-def log_family_member_details(username: str, jwt_token: str, log_id: str, db: Session = Depends(session.get_db)):
-
-    token_verification = security.verify_token(jwt_token)
-
-    if username != token_verification:
-        raise HTTPException(status_code=400, detail="Verification Failed")
-
-    query = text("""
-            SELECT 
-                el.id AS log_id,
-                el.detected_at,
-                el.exited_at,
-                el.snapshot_url,
-                p.id AS person_id,
-                p.name AS person_name,
-                fm.relationship,
-                ph.photo_url AS profile_photo,
-                c.location AS room_name,
-                f.title AS floor_title
-            FROM event_logs el
-            JOIN persons p ON el.person_id = p.id
-            LEFT JOIN family_members fm ON p.id = fm.person_id
-            LEFT JOIN person_photos ph ON p.id = ph.person_id AND ph.is_primary = TRUE
-            LEFT JOIN cameras c ON el.camera_id = c.id
-            LEFT JOIN floors f ON c.floor_id = f.id
-            WHERE el.id = :lid
-        """)
-
-    result = db.execute(query, {"lid": log_id})
-    row = result.mappings().fetchone()
-
-    # 3. Handle Not Found
-    if not row:
-        raise HTTPException(status_code=404, detail="Log not found")
-
-    # 4. Return Structured Data
-    return {
-        "message": "Log details fetched successfully",
-        "log_info": {
-            "id": str(row["log_id"]),
-            "detected_at": str(row["detected_at"]),
-            "exited_at": str(row["exited_at"]) if row["exited_at"] else "Ongoing",
-            "snapshot_url": row["snapshot_url"]
-        },
-        "person_info": {
-            "id": str(row["person_id"]),
-            "name": row["person_name"],
-            "relationship": row["relationship"] or "Unknown",
-            "profile_photo": row["profile_photo"] or ""
-        },
-        "location_info": {
-            "room": row["room_name"] or "Unknown Room",
-            "floor": row["floor_title"] or "Unknown Floor"
-        }
-    }
-
-@router.get("/logs/unwanted_person/details")
-def log_unwanted_person_details(username: str, user_id: str, jwt_token: str, log_id: str, db: Session = Depends(session.get_db)):
-
-    token_verification = security.verify_token(jwt_token)
-    if username != token_verification:
-        raise HTTPException(status_code=400, detail="Verification Failed")
-
-    # 2. Step 1: Get the Person ID from the provided Log ID
-    # We only need the person_id here to know WHO we are looking for.
-    query_find_person = text("""
-        SELECT person_id 
-        FROM event_logs 
-        WHERE id = :log_id AND user_id = :user_id
-    """)
-
-    row = db.execute(query_find_person, {"log_id": log_id, "user_id": user_id}).fetchone()
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Log not found")
-
-    target_person_id = row[0]  # Extract the UUID
-
-    # 3. Step 2: Fetch ALL logs for that Person
-    # Now we get the full list (history) for this specific unwanted person.
-    query_all_logs = text("""
-        SELECT 
-            el.id AS log_id,
-            el.detected_at,
-            el.exited_at,
-            el.snapshot_url,
-            p.name AS person_name,
-            c.location AS room_name,
-            f.title AS floor_title
-        FROM event_logs el
-        JOIN persons p ON el.person_id = p.id
-        LEFT JOIN cameras c ON el.camera_id = c.id
-        LEFT JOIN floors f ON c.floor_id = f.id
-        WHERE el.person_id = :person_id 
-        ORDER BY el.detected_at DESC
-    """)
-
-    result_logs = db.execute(query_all_logs, {"person_id": target_person_id})
-    all_logs_list = result_logs.mappings().all()
-
-    # 4. Return the List
-    return {
-        "message": "Unwanted person history fetched successfully",
-        "person_id": str(target_person_id),
-        "count": len(all_logs_list),
-        "logs": all_logs_list
-    }
+# @router.get("/logs/family_member/details")
+# def log_family_member_details(username: str, jwt_token: str, log_id: str, db: Session = Depends(session.get_db)):
+#
+#     token_verification = security.verify_token(jwt_token)
+#
+#     if username != token_verification:
+#         raise HTTPException(status_code=400, detail="Verification Failed")
+#
+#     query = text("""
+#             SELECT
+#                 el.id AS log_id,
+#                 el.detected_at,
+#                 el.exited_at,
+#                 el.snapshot_url,
+#                 p.id AS person_id,
+#                 p.name AS person_name,
+#                 fm.relationship,
+#                 ph.photo_url AS profile_photo,
+#                 c.location AS room_name,
+#                 f.title AS floor_title
+#             FROM event_logs el
+#             JOIN persons p ON el.person_id = p.id
+#             LEFT JOIN family_members fm ON p.id = fm.person_id
+#             LEFT JOIN person_photos ph ON p.id = ph.person_id AND ph.is_primary = TRUE
+#             LEFT JOIN cameras c ON el.camera_id = c.id
+#             LEFT JOIN floors f ON c.floor_id = f.id
+#             WHERE el.id = :lid
+#         """)
+#
+#     result = db.execute(query, {"lid": log_id})
+#     row = result.mappings().fetchone()
+#
+#     # 3. Handle Not Found
+#     if not row:
+#         raise HTTPException(status_code=404, detail="Log not found")
+#
+#     # 4. Return Structured Data
+#     return {
+#         "message": "Log details fetched successfully",
+#         "log_info": {
+#             "id": str(row["log_id"]),
+#             "detected_at": str(row["detected_at"]),
+#             "exited_at": str(row["exited_at"]) if row["exited_at"] else "Ongoing",
+#             "snapshot_url": row["snapshot_url"]
+#         },
+#         "person_info": {
+#             "id": str(row["person_id"]),
+#             "name": row["person_name"],
+#             "relationship": row["relationship"] or "Unknown",
+#             "profile_photo": row["profile_photo"] or ""
+#         },
+#         "location_info": {
+#             "room": row["room_name"] or "Unknown Room",
+#             "floor": row["floor_title"] or "Unknown Floor"
+#         }
+#     }
+#
+# @router.get("/logs/unwanted_person/details")
+# def log_unwanted_person_details(username: str, user_id: str, jwt_token: str, log_id: str, db: Session = Depends(session.get_db)):
+#
+#     token_verification = security.verify_token(jwt_token)
+#     if username != token_verification:
+#         raise HTTPException(status_code=400, detail="Verification Failed")
+#
+#     # 2. Step 1: Get the Person ID from the provided Log ID
+#     # We only need the person_id here to know WHO we are looking for.
+#     query_find_person = text("""
+#         SELECT person_id
+#         FROM event_logs
+#         WHERE id = :log_id AND user_id = :user_id
+#     """)
+#
+#     row = db.execute(query_find_person, {"log_id": log_id, "user_id": user_id}).fetchone()
+#
+#     if not row:
+#         raise HTTPException(status_code=404, detail="Log not found")
+#
+#     target_person_id = row[0]  # Extract the UUID
+#
+#     # 3. Step 2: Fetch ALL logs for that Person
+#     # Now we get the full list (history) for this specific unwanted person.
+#     query_all_logs = text("""
+#         SELECT
+#             el.id AS log_id,
+#             el.detected_at,
+#             el.exited_at,
+#             el.snapshot_url,
+#             p.name AS person_name,
+#             c.location AS room_name,
+#             f.title AS floor_title
+#         FROM event_logs el
+#         JOIN persons p ON el.person_id = p.id
+#         LEFT JOIN cameras c ON el.camera_id = c.id
+#         LEFT JOIN floors f ON c.floor_id = f.id
+#         WHERE el.person_id = :person_id
+#         ORDER BY el.detected_at DESC
+#     """)
+#
+#     result_logs = db.execute(query_all_logs, {"person_id": target_person_id})
+#     all_logs_list = result_logs.mappings().all()
+#
+#     # 4. Return the List
+#     return {
+#         "message": "Unwanted person history fetched successfully",
+#         "person_id": str(target_person_id),
+#         "count": len(all_logs_list),
+#         "logs": all_logs_list
+#     }

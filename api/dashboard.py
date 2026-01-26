@@ -57,8 +57,7 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
 
     query_object_interation = text("""
             SELECT 
-                object_name,moved_at,
-                location_data
+                object_name,moved_at
             FROM object_interactions
             WHERE event_log_id = :event_log_id
         """)
@@ -77,7 +76,7 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
             "person_photo": result_family_log[5] or "Unknown Person Photo",
             "room": result_family_log[6] or "Unknown Room",
             "floor": result_family_log[7] or "Unknown Floor",
-            "object_interation": result_family_log_object
+            "object_interaction": result_family_log_object
         }
     else:
         family_data = None
@@ -120,7 +119,7 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
             "person_photo": result_unwanted_log[5] or "Unknown Person Photo",
             "room": result_unwanted_log[6] or "Unknown Room",
             "floor": result_unwanted_log[7] or "Unknown Floor",
-            "object_interation": result_unwanted_log_object
+            "object_interaction": result_unwanted_log_object
         }
     else:
         unwanted_data = None

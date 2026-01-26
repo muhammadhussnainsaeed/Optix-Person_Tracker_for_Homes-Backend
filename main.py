@@ -28,7 +28,7 @@ def read_root():
 
 
 if __name__ == '__main__':
-    uvicorn.run (app, host='1 2.168.100.8' , port=8888)
+    uvicorn.run (app, host='192.168.100.8' , port=8888)
 
 @app.get("/endpoint")
 def function12():
