@@ -19,7 +19,8 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
     query = text("""
         SELECT id, name, location, description, video_url, is_private, floor_id
         FROM cameras 
-        WHERE user_id = :user_id
+        WHERE user_id = :user_id 
+            Order by id asc 
     """)
 
     result = db.execute(query, {"user_id": user_id})
@@ -27,7 +28,6 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
 
     return {
         "message": "Cameras fetched successfully",
-        "count": len(cameras),
         "cameras": cameras
     }
 
