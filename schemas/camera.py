@@ -37,8 +37,8 @@ class Delete_Camera(BaseModel):
     jwt_token: str
 
 class Update_Camera_Network(BaseModel):
+    user_id: str
     username: str
     jwt_token: str
-    user_id: str
     camera_id: str
-    connected_camera_ids: List[str]
+    connected_camera_id: List[str]

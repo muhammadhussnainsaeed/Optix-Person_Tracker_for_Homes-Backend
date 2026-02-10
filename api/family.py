@@ -238,10 +238,17 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
             p.id, 
             p.name, 
             f.relationship,
-            ph.photo_url
+            (
+        SELECT json_agg(
+            json_build_object(
+                'photo_url', pp.photo_url 
+            )
+        )
+        FROM person_photos pp
+        WHERE pp.person_id = p.id
+    ) AS photos
         FROM persons p
         JOIN family_members f ON p.id = f.person_id
-        LEFT JOIN person_photos ph ON p.id = ph.person_id AND ph.is_primary = TRUE
         WHERE p.user_id = :user_id 
           AND p.person_type = 'FAMILY'
     """)
@@ -251,6 +258,5 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
 
     return {
         "message": "Family Members fetched successfully",
-        "count": len(family_members),
         "family_members": family_members
     }

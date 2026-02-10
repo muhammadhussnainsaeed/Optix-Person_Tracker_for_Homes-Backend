@@ -131,7 +131,7 @@ def delete_floor(user_data: Delete_Floor, db: Session = Depends(session.get_db))
         # B. Delete camera_links associated with this floor's cameras
         db.execute(text("""
             DELETE FROM camera_links 
-            WHERE camera_id_from IN (SELECT id FROM cameras WHERE floor_id = :f_id)
+            WHERE camera_id_from IN (SELECT id FROM cameras  WHERE floor_id = :f_id)
                OR camera_id_to IN (SELECT id FROM cameras WHERE floor_id = :f_id)
         """), {"f_id": user_data.floor_id})
 

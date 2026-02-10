@@ -98,7 +98,7 @@ def update_camera(user_data: Update_Camera, db: Session = Depends(session.get_db
                      is_private  = :is_private,
                      floor_id    = :floor_id
                  WHERE id = :camera_id
-                   AND user_id = :user_id RETURNING id, name, video_url
+                   AND user_id = :user_id RETURNING id, name
                  """)
 
     # 3. Execute the Query
@@ -128,8 +128,7 @@ def update_camera(user_data: Update_Camera, db: Session = Depends(session.get_db
     return {
         "message": "Camera updated successfully",
         "id": updated_row[0],
-        "name": updated_row[1],
-        "video_url": updated_row[2]
+        "name": updated_row[1]
     }
 
 @router.delete("/camera/delete")
@@ -155,16 +154,22 @@ def delete_camera(user_data: Delete_Camera, db: Session = Depends(session.get_db
                                  DELETE
                                  FROM cameras
                                  WHERE id = :c_id
-                                   AND user_id = :u_id RETURNING id
+                                   AND user_id = :u_id RETURNING id,name
                                  """), {"c_id": user_data.camera_id, "u_id": user_data.user_id})
 
+        result_data = result.fetchone()
+
         # If RETURNING id is empty, it means nothing was deleted (wrong ID or wrong User)
-        if not result.fetchone():
+        if not result_data:
             db.rollback()
             raise HTTPException(status_code=404, detail="Camera not found or unauthorized")
 
         db.commit()
-        return {"status": "success", "message": "Camera and related logs purged."}
+        return {
+            "message": "Camera and related logs purged.",
+            "id": result_data[0],
+            "name": result_data[1]
+        }
 
     except Exception as e:
         db.rollback()
@@ -172,7 +177,7 @@ def delete_camera(user_data: Delete_Camera, db: Session = Depends(session.get_db
         raise HTTPException(status_code=500, detail="Internal Server Error during deletion")
 
 @router.get("/camera/network/fetch")
-def fetch_camera_network(username: str,jwt_token: str, user_id: str,camera_id: str,  db: Session = Depends(session.get_db)):
+def fetch_camera_network(username: str,jwt_token: str, camera_id: str,  db: Session = Depends(session.get_db)):
 
     token_verification = security.verify_token(jwt_token)
     if username != token_verification:
@@ -195,53 +200,7 @@ def fetch_camera_network(username: str,jwt_token: str, user_id: str,camera_id: s
 
     return {
         "message": "Camera Links fetched successfully",
-        "count": len(camera_links),
-        "cameras": camera_links
-    }
-
-@router.get("/camera/graph")
-def camera_graph(username: str, jwt_token: str, user_id: str, db: Session = Depends(session.get_db)):
-
-    token_verification = security.verify_token(jwt_token)
-    if username != token_verification:
-        raise HTTPException(status_code=400, detail="Verification Failed")
-
-    # 1. Fetch all cameras belonging to the user
-    query = text("""
-                 SELECT id
-                 FROM cameras
-                 WHERE user_id = :user_id
-                 """)
-
-    result = db.execute(query, {"user_id": user_id})
-    camera_list = result.mappings().all()
-
-    camera_graph_data = {}
-
-    # 2. Iterate through each camera to find its neighbors
-    for camera in camera_list:
-        current_id = str(camera["id"])
-
-        query_for_network = text("""
-                                 SELECT CASE
-                                            WHEN camera_id_from = :camera_id THEN camera_id_to
-                                            ELSE camera_id_from
-                                            END AS connected_camera_id
-                                 FROM camera_links
-                                 WHERE camera_id_from = :camera_id
-                                    OR camera_id_to = :camera_id
-                                 """)
-
-        result2 = db.execute(query_for_network, {"camera_id": current_id})
-        # Extract the IDs into a flat list of strings
-        connections = [str(row["connected_camera_id"]) for row in result2.mappings().all()]
-
-        # 3. Map the camera ID to its list of connections
-        camera_graph_data[current_id] = connections
-
-    return {
-        "message": "Camera graph fetched successfully",
-        "graph": camera_graph_data
+        "camera_list": camera_links
     }
 
 @router.put("/camera/network/update")
@@ -263,13 +222,13 @@ def update_camera_network(data: Update_Camera_Network, db: Session = Depends(ses
         db.execute(delete_query, {"camera_id": data.camera_id})
 
         # 3. Batch Insert new links
-        if data.connected_camera_ids:
+        if data.connected_camera_id:
             insert_query = text("""
                                 INSERT INTO camera_links (camera_id_from, camera_id_to)
                                 VALUES (:camera_id, :target_id)
                                 """)
 
-            for target_id in data.connected_camera_ids:
+            for target_id in data.connected_camera_id:
                 # Basic safety: don't link a camera to itself
                 if target_id == data.camera_id:
                     continue
@@ -282,13 +241,122 @@ def update_camera_network(data: Update_Camera_Network, db: Session = Depends(ses
         db.commit()
         return {
             "message": "Camera network updated successfully",
-            "connected_count": len(data.connected_camera_ids)
+            ##"connected_count": len(data.connected_camera_ids)
         }
 
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update network: {str(e)}")
 
+@router.get("/camera/graph")
+def get_camera_matrix(username: str, jwt_token: str, user_id: str, db: Session = Depends(session.get_db)):
+    # 1. Fetch ALL Cameras for this user (Ordered is important!)
+
+    token_verification = security.verify_token(jwt_token)
+    if username != token_verification:
+        raise HTTPException(status_code=400, detail="Verification Failed")
+
+    # We order by ID or Name so the index (0, 1, 2) is always consistent.
+    query_cams = text("""
+                      SELECT id, name
+                      FROM cameras
+                      WHERE user_id = :user_id
+                      ORDER BY id ASC
+                      """)
+    cameras = db.execute(query_cams, {"user_id": user_id}).fetchall()
+
+    if not cameras:
+        return {"message": "No cameras found", "matrix": {}}
+
+    # Create a mapping to find index quickly: {'cam_id_1': 0, 'cam_id_2': 1, ...}
+    cam_index_map = {str(row[0]): i for i, row in enumerate(cameras)}
+    cam_names = [row[1] for row in cameras]  # ["Garage", "Kitchen", "Lounge"]
+    total_cams = len(cameras)
+
+    # 2. Initialize the Matrix (All False)
+    # Result: {'Garage': [False, False, False], 'Kitchen': [False, False, False]...}
+    matrix = {name: [False] * total_cams for name in cam_names}
+
+    # 3. Fetch Connections
+    # We only care about links where BOTH cameras belong to this user
+    query_links = text("""
+                       SELECT camera_id_from, camera_id_to
+                       FROM camera_links
+                       """)
+    links = db.execute(query_links).fetchall()
+
+    # 4. Fill the "True" values
+    for link in links:
+        id_from = str(link[0])
+        id_to = str(link[1])
+
+        # Only process if both cameras belong to the current user
+        if id_from in cam_index_map and id_to in cam_index_map:
+            idx_from = cam_index_map[id_from]
+            idx_to = cam_index_map[id_to]
+
+            name_from = cam_names[idx_from]
+            name_to = cam_names[idx_to]
+
+            # Set True for both directions (Bidirectional)
+            # Row 'From' -> Col 'To' is True
+            matrix[name_from][idx_to] = True
+
+            # Row 'To' -> Col 'From' is True
+            matrix[name_to][idx_from] = True
+
+    # 5. Return the clean JSON
+    return {
+        #"camera_order": cam_names,  # Frontend needs this to know index 0 is Garage
+        "connections": matrix
+    }
+
+# @router.get("/camera/graph")
+# def camera_graph(username: str, jwt_token: str, user_id: str, db: Session = Depends(session.get_db)):
+#
+#     token_verification = security.verify_token(jwt_token)
+#     if username != token_verification:
+#         raise HTTPException(status_code=400, detail="Verification Failed")
+#
+#     # 1. Fetch all cameras belonging to the user
+#     query = text("""
+#                  SELECT id
+#                  FROM cameras
+#                  WHERE user_id = :user_id
+#                  """)
+#
+#     result = db.execute(query, {"user_id": user_id})
+#     camera_list = result.mappings().all()
+#
+#     camera_graph_data = {}
+#
+#     # 2. Iterate through each camera to find its neighbors
+#     for camera in camera_list:
+#         current_id = str(camera["id"])
+#
+#         query_for_network = text("""
+#                                  SELECT CASE
+#                                             WHEN camera_id_from = :camera_id THEN camera_id_to
+#                                             ELSE camera_id_from
+#                                             END AS connected_camera_id
+#                                  FROM camera_links
+#                                  WHERE camera_id_from = :camera_id
+#                                     OR camera_id_to = :camera_id
+#                                  """)
+#
+#         result2 = db.execute(query_for_network, {"camera_id": current_id})
+#         # Extract the IDs into a flat list of strings
+#         connections = [str(row["connected_camera_id"]) for row in result2.mappings().all()]
+#
+#         # 3. Map the camera ID to its list of connections
+#         camera_graph_data[current_id] = connections
+#
+#     return {
+#         "message": "Camera graph fetched successfully",
+#         "graph": camera_graph_data
+#     }
+
+#for now don't need to use it
 # @router.get("/camera/details")
 # def camera_details(username: str,jwt_token: str, user_id: str, camera_id: str, db: Session = Depends(session.get_db)):
 #     user_data = camera.Camera_Detail(
