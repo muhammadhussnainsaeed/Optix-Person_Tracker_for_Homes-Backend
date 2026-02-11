@@ -243,6 +243,7 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
             json_build_object(
                 'photo_url', pp.photo_url 
             )
+            order by pp.photo_url
         )
         FROM person_photos pp
         WHERE pp.person_id = p.id
@@ -251,6 +252,7 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
         JOIN family_members f ON p.id = f.person_id
         WHERE p.user_id = :user_id 
           AND p.person_type = 'FAMILY'
+        Order by p.id asc 
     """)
 
     result = db.execute(query, {"user_id": user_id})
