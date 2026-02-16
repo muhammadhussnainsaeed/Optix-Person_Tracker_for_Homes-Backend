@@ -8,6 +8,8 @@ from typing import List
 import shutil
 import os
 
+from schemas.family import DeleteFamilyMember
+
 router = APIRouter(tags=["Family"])
 
 @router.post("/family/add")
@@ -81,7 +83,7 @@ def add_family_member_with_photos(name: str = Form(...), relationship: str = For
 
         for index, file in enumerate(files):
 
-            new_filename = f"{new_person_id}_{index}.png"
+            new_filename = f"{new_person_id}_{index}.jpg"
 
             save_path = f"media/persons/{new_filename}"
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -118,11 +120,7 @@ def add_family_member_with_photos(name: str = Form(...), relationship: str = For
 
         return {
             "message": "Family Member and Photos added successfully",
-            "user_id": user_data.user_id,
-            "member_id": str(new_person_id),
-            "member_name": new_person_name,
-            "member_relationship": new_person_relationship,
-            "photos_saved": 3
+            "family_member_id": str(new_person_id)
         }
 
     except Exception as e:
@@ -130,9 +128,8 @@ def add_family_member_with_photos(name: str = Form(...), relationship: str = For
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail="Transaction failed.")
 
-
 @router.put("/family/update")
-def update_family_member_with_photos(person_id: int = Form(...),name: str = Form(...),relationship: str = Form(...),
+def update_family_member_with_photos(person_id: str = Form(...),name: str = Form(...),relationship: str = Form(...),
         username: str = Form(...),jwt_token: str = Form(...),user_id: str = Form(...),
         files: List[UploadFile] = File(...),db: Session = Depends(session.get_db)):
     # --- 1. Security & Verification ---
@@ -212,10 +209,7 @@ def update_family_member_with_photos(person_id: int = Form(...),name: str = Form
 
         return {
             "message": "Family member fully updated",
-            "person_id": person_id,
-            "name": name,
-            "relationship": relationship,
-            "photos_replaced": 3
+            "family_member_id": person_id,
         }
 
     except HTTPException as he:
@@ -262,3 +256,58 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
         "message": "Family Members fetched successfully",
         "family_members": family_members
     }
+
+@router.delete("/family/delete")
+def delete_family_member(user_data: DeleteFamilyMember, db: Session = Depends(session.get_db)):
+    # 1. Security Check
+    token_verification = security.verify_token(user_data.jwt_token)
+    if user_data.username != token_verification:
+        raise HTTPException(status_code=401, detail="Verification Failed")
+
+    try:
+
+        db.execute(
+            text("DELETE FROM family_members WHERE person_id = :person_id"),
+            {"person_id": user_data.person_id}
+        )
+
+        db.execute(
+            text("DELETE FROM person_photos WHERE person_id = :person_id"),
+            {"person_id": user_data.person_id}
+        )
+
+        db.execute(
+            text("DELETE FROM event_logs WHERE person_id = :person_id AND user_id = :user_id"),
+            {"person_id": user_data.person_id, "user_id": user_data.user_id}
+        )
+
+        result = db.execute(
+            text("""
+                 DELETE
+                 FROM persons
+                 WHERE user_id = :user_id
+                   AND id = :person_id RETURNING id
+                 """),
+            {"user_id": user_data.user_id, "person_id": user_data.person_id}
+        )
+
+        deleted_record = result.fetchone()
+
+        if not deleted_record:
+            db.rollback()
+            raise HTTPException(status_code=404, detail="Person not found or unauthorized")
+
+        db.commit()
+
+        return {
+            "message": "Family member deleted successfully.",
+            "id": deleted_record[0]
+        }
+
+    except HTTPException as he:
+
+        raise he
+    except Exception as e:
+        db.rollback()
+        print(f"Error deleting family member: {e}")  # internal logging
+        raise HTTPException(status_code=500, detail="Internal Server Error during deletion")

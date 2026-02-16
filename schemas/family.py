@@ -12,3 +12,9 @@ class GetFamilyDetails(BaseModel):
     username: str
     jwt_tokens: str
     person_id: str
+
+class DeleteFamilyMember(BaseModel):
+    user_id: str
+    username: str
+    person_id: str
+    jwt_token: str

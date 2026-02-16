@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from db import session
-from core import security
 from dateutil import parser
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from core import security
+from db import session
 from schemas import logs
 
 router = APIRouter(tags=["Logs"])
