@@ -119,7 +119,7 @@ def add_family_member_with_photos(name: str = Form(...), relationship: str = For
         db.commit()
 
         return {
-            "message": "Family Member and Photos added successfully",
+            "message": "Family Member successfully added",
             "family_member_id": str(new_person_id)
         }
 
@@ -181,7 +181,7 @@ def update_family_member_with_photos(person_id: str = Form(...),name: str = Form
         # C. INSERT New Photos (Exactly like "Add" logic)
         for index, file in enumerate(files):
             # We assume these are fresh photos
-            new_filename = f"{person_id}_{index}_v2.png"
+            new_filename = f"{person_id}_{index}.jpg"
             save_path = f"media/persons/{new_filename}"
 
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -208,7 +208,7 @@ def update_family_member_with_photos(person_id: str = Form(...),name: str = Form
         db.commit()
 
         return {
-            "message": "Family member fully updated",
+            "message": "Family member successfully updated",
             "family_member_id": person_id,
         }
 

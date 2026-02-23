@@ -1,16 +1,17 @@
 from fastapi import FastAPI
 import uvicorn
-from api import auth,cameras,dashboard,floor,family,unwanted_person,logs
+from api import auth,cameras,dashboard,floor,family,unwanted_person,logs,settings
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 app.include_router(auth.router)
-app.include_router(cameras.router)
 app.include_router(dashboard.router)
+app.include_router(cameras.router)
 app.include_router(floor.router)
 app.include_router(family.router)
 app.include_router(unwanted_person.router)
 app.include_router(logs.router)
+app.include_router(settings.router)
 app.mount("/media", StaticFiles(directory="media"), name="media")
 
 @app.get("/")
