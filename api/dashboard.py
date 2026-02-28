@@ -63,20 +63,19 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
         """)
 
     if result_family_log:
-
         result4 = db.execute(query_object_interation, {"event_log_id": result_family_log[0]})
         result_family_log_object = result4.mappings().all()
 
         family_data = {
-            "id": str(result_family_log[0]),
-            "detected_at": str(result_family_log[1]) if result_family_log[1] else None,
-            "exited_at": str(result_family_log[2]) if result_family_log[2] else None,
+            "log_id": str(result_family_log[0]),  # Fixed: Changed from "id"
+            "detected_at": result_family_log[1].isoformat() if result_family_log[1] else None,
+            "exited_at": result_family_log[2].isoformat() if result_family_log[2] else None,
             "snapshot_url": result_family_log[3] or "",
-            "name": result_family_log[4] or "Unknown",
+            "person_name": result_family_log[4] or "Unknown",  # Fixed: Changed from "name"
             "person_photo": result_family_log[5] or "Unknown Person Photo",
-            "room": result_family_log[6] or "Unknown Room",
-            "floor": result_family_log[7] or "Unknown Floor",
-            "object_interaction": result_family_log_object
+            "room_name": result_family_log[6] or "Unknown Room",  # Fixed: Changed from "room"
+            "floor_title": result_family_log[7] or "Unknown Floor",  # Fixed: Changed from "floor"
+            "interactions": result_family_log_object  # Fixed: Changed from "object_interaction"
         }
     else:
         family_data = None
@@ -106,20 +105,19 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
     result_unwanted_log = result3.fetchone()
 
     if result_unwanted_log:
-
         result5 = db.execute(query_object_interation, {"event_log_id": result_unwanted_log[0]})
         result_unwanted_log_object = result5.mappings().all()
 
         unwanted_data = {
-            "id": str(result_unwanted_log[0]) or "No id",
-            "detected_at": str(result_unwanted_log[1]) if result_unwanted_log[1] else None,
-            "exited_at": str(result_unwanted_log[2]) if result_unwanted_log[2] else None,
+            "log_id": str(result_unwanted_log[0]),  # Fixed: Changed from "id"
+            "detected_at": result_unwanted_log[1].isoformat() if result_unwanted_log[1] else None,
+            "exited_at": result_unwanted_log[2].isoformat() if result_unwanted_log[2] else None,
             "snapshot_url": result_unwanted_log[3] or "",
-            "name": result_unwanted_log[4] or "Unknown",
+            "person_name": result_unwanted_log[4] or "Unknown",  # Fixed: Changed from "name"
             "person_photo": result_unwanted_log[5] or "Unknown Person Photo",
-            "room": result_unwanted_log[6] or "Unknown Room",
-            "floor": result_unwanted_log[7] or "Unknown Floor",
-            "object_interaction": result_unwanted_log_object
+            "room_name": result_unwanted_log[6] or "Unknown Room",  # Fixed: Changed from "room"
+            "floor_title": result_unwanted_log[7] or "Unknown Floor",  # Fixed: Changed from "floor"
+            "interactions": result_unwanted_log_object  # Fixed: Changed from "object_interaction"
         }
     else:
         unwanted_data = None
