@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
-from sqlalchemy import text, null, Delete
-from db import session
+
 from core import security
+from db import session
 from schemas import camera
 from schemas.camera import Update_Camera, Delete_Camera, Update_Camera_Network
 

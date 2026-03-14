@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from sqlalchemy import text
-from db import session
+from sqlalchemy.orm import Session
+
 from core import security
+from db import session
+
 router = APIRouter(tags=["Dashboard"])
 
 @router.get("/dashboard/summary")

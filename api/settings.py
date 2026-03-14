@@ -1,6 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from core import security
@@ -99,7 +97,7 @@ def update_password(user_data: settings.UpdatePassword, db: Session = Depends(se
 
 
 from sqlalchemy.exc import IntegrityError
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 

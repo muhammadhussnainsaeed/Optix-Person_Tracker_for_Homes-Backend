@@ -1,0 +1,15 @@
+# Environments
+.venv/
+venv/
+env/
+
+# Python Cache (These are the compiled files making your untracked list huge)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE Settings
+.idea/
+
+# OS Files
+.DS_Store
