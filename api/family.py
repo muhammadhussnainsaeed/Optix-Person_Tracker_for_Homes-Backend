@@ -1,7 +1,7 @@
 import os
 import shutil
 from typing import List
-
+from ai_engine.orchestrator import camera_manager
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -31,7 +31,7 @@ def add_family_member_with_photos(name: str = Form(...), relationship: str = For
         raise HTTPException(status_code=400, detail="Verification Failed")
 
     if len(files) != 3:
-        raise HTTPException(status_code=400, detail="You must upload exactly 3 persons.")
+        raise HTTPException(status_code=400, detail="You must upload exactly 3 photos.")
 
     try:
         person_type = "FAMILY"
@@ -78,8 +78,8 @@ def add_family_member_with_photos(name: str = Form(...), relationship: str = For
         })
 
         # Capture the new ID
-        new_person_row = result.fetchone()
-        new_person_relationship = new_person_row[0]
+        # new_person_row = result.fetchone()
+        # new_person_relationship = new_person_row[0]
 
 
         for index, file in enumerate(files):
@@ -118,6 +118,7 @@ def add_family_member_with_photos(name: str = Form(...), relationship: str = For
 
         # --- Step 3: Commit ---
         db.commit()
+        camera_manager.broadcast_reload_faces(user_id)
 
         return {
             "message": "Family Member successfully added",
@@ -207,6 +208,7 @@ def update_family_member_with_photos(person_id: str = Form(...),name: str = Form
 
         # --- 5. Commit ---
         db.commit()
+        camera_manager.broadcast_reload_faces(user_id)
 
         return {
             "message": "Family member successfully updated",
@@ -299,6 +301,7 @@ def delete_family_member(user_data: DeleteFamilyMember, db: Session = Depends(se
             raise HTTPException(status_code=404, detail="Person not found or unauthorized")
 
         db.commit()
+        camera_manager.broadcast_reload_faces(user_data.user_id)
 
         return {
             "message": "Family member deleted successfully.",

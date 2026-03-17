@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from core import security
 from db import session
+from ai_engine.orchestrator import camera_manager
 from schemas import camera
 from schemas.camera import Update_Camera, Delete_Camera, Update_Camera_Network
 
@@ -33,7 +34,7 @@ def fetch_list(username: str,jwt_token: str, user_id: str, db: Session = Depends
     }
 
 @router.post("/camera/add")
-def add_camera(user_data: camera.Create_Camera, db: Session = Depends(session.get_db)):
+def add_camera(user_data: camera.Create_Camera, background_tasks: BackgroundTasks, db: Session = Depends(session.get_db)):
     token_verification = security.verify_token(user_data.jwt_token)
 
     if user_data.username != token_verification:
@@ -73,6 +74,7 @@ def add_camera(user_data: camera.Create_Camera, db: Session = Depends(session.ge
 
     result = result.fetchone()
     db.commit()
+    background_tasks.add_task(camera_manager.sync_cameras())
 
     return {
         "message": "Camera Added successfully",
@@ -82,7 +84,7 @@ def add_camera(user_data: camera.Create_Camera, db: Session = Depends(session.ge
     }
 
 @router.put("/camera/update")
-def update_camera(user_data: Update_Camera, db: Session = Depends(session.get_db)):
+def update_camera(user_data: Update_Camera, background_tasks: BackgroundTasks, db: Session = Depends(session.get_db)):
     # 1. Verify JWT Token
     token_verification = security.verify_token(user_data.jwt_token)
 
@@ -125,6 +127,7 @@ def update_camera(user_data: Update_Camera, db: Session = Depends(session.get_db
         )
 
     db.commit()
+    background_tasks.add_task(camera_manager.sync_cameras)
 
     return {
         "message": "Camera updated successfully",
@@ -133,7 +136,7 @@ def update_camera(user_data: Update_Camera, db: Session = Depends(session.get_db
     }
 
 @router.delete("/camera/delete")
-def delete_camera(user_data: Delete_Camera, db: Session = Depends(session.get_db)):
+def delete_camera(user_data: Delete_Camera, background_tasks: BackgroundTasks, db: Session = Depends(session.get_db)):
     # 1. Verify JWT Token
     token_verification = security.verify_token(user_data.jwt_token)
     if user_data.username != token_verification:
@@ -166,6 +169,8 @@ def delete_camera(user_data: Delete_Camera, db: Session = Depends(session.get_db
             raise HTTPException(status_code=404, detail="Camera not found or unauthorized")
 
         db.commit()
+        background_tasks.add_task(camera_manager.sync_cameras)
+
         return {
             "message": "Camera and related logs purged.",
             "id": result_data[0],

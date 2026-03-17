@@ -44,7 +44,7 @@ class FaceCache:
                     for photo_path in data["photos"]:
                         try:
                             rep = \
-                            DeepFace.represent(img_path=photo_path, model_name="VGG-Face", enforce_detection=False)[0]
+                            DeepFace.represent(img_path=photo_path, model_name="ArcFace", enforce_detection=False)[0]
                             embeddings.append(rep["embedding"])
                         except Exception as e:
                             print(f"⚠️ [SYNC] Failed processing {photo_path}: {e}")
@@ -74,7 +74,7 @@ def identify_face(face_crop, user_specific_cache: dict):
         return "Unknown", None, "unwanted_detected"
 
     try:
-        target_embedding = DeepFace.represent(img_path=face_crop, model_name="VGG-Face", enforce_detection=False)[0][
+        target_embedding = DeepFace.represent(img_path=face_crop, model_name="ArcFace", enforce_detection=False)[0][
             "embedding"]
 
         best_match_name, best_match_id, best_match_type = "Unknown", None, "unwanted_detected"

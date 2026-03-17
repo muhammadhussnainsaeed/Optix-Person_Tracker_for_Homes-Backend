@@ -42,7 +42,6 @@ import warnings
 
 # ==========================================
 # 1. SUPPRESS TENSORFLOW & DEPRECATION NOISE
-# (Must be at the absolute top of the file)
 # ==========================================
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -71,15 +70,14 @@ from fastapi.staticfiles import StaticFiles
 # Your App Routers
 from api import auth, cameras, dashboard, floor, family, unwanted_person, logs, settings
 
-# The new AI Engine modules (from the updated architecture)
+# The AI Engine modules
 from ai_engine.face_recognition import FaceCache
-from ai_engine.vision_worker import camera_worker_process
+from ai_engine.orchestrator import camera_manager  # <-- New Orchestrator
 
 # ==========================================
 # 3. GLOBAL STATE & WEBSOCKET BRIDGE
 # ==========================================
 alert_queue = multiprocessing.Queue()
-active_ai_processes = []  # Tracks all running camera processes
 
 
 class ConnectionManager:
@@ -127,31 +125,17 @@ async def lifespan(app: FastAPI):
     # 2. Sync database faces into memory
     FaceCache.sync_from_db()
 
-    # 3. Spawn a dedicated GPU process for each camera
-    cameras = FaceCache.get_all_cameras()
-    print(f"🤖 Booting up AI Engine for {len(cameras)} cameras...")
-
-    for cam_id, cam_data in cameras.items():
-        user_id = cam_data["user_id"]
-        user_cache = FaceCache.get_user_cache(user_id)
-
-        # Pass the alert_queue to the worker so it can trigger iOS notifications
-        p = multiprocessing.Process(
-            target=camera_worker_process,
-            args=(cam_id, cam_data["video_url"], user_id, user_cache, alert_queue),
-            name=f"CamWorker-{cam_id[-4:]}"
-        )
-        p.start()
-        active_ai_processes.append(p)
+    camera_manager.set_alert_queue(alert_queue)
+    # 3. DELEGATE TO ORCHESTRATOR
+    # (We deleted the old loop. The manager handles booting the cameras now!)
+    camera_manager.sync_cameras()
 
     yield  # The server is now running!
 
     print("🛑 Shutting down server and releasing GPU memory...")
-    # 4. Clean up AI Processes on shutdown to prevent VRAM leaks
-    for p in active_ai_processes:
-        p.terminate()
-        p.join()
-    print("✅ All AI workers terminated cleanly.")
+
+    # 4. Clean up AI Processes on shutdown
+    camera_manager.shutdown_all()
 
 
 # ==========================================
@@ -184,10 +168,9 @@ async def websocket_alerts(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        print("App disconnected from WebSockets.")
+        print("📱 iOS App disconnected from WebSockets.")
 
 
 if __name__ == '__main__':
-    # NOTE: On Windows, using multiprocessing with reload=True can sometimes cause duplicate workers.
-    # If your GPU memory suddenly spikes to 100%, change reload=False.
-    uvicorn.run("main:app", host='0.0.0.0', port=8888, reload=True)
+    # NOTE: Keep reload=False when using Windows multiprocessing to prevent duplicate worker spawns
+    uvicorn.run("main:app", host='0.0.0.0', port=8888, reload=False)

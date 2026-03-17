@@ -8,7 +8,7 @@ EVENTS_DIR = os.path.join(BASE_DIR, "media/events")
 
 # AI Settings
 COOLDOWN_SECONDS = 15
-FACE_MATCH_THRESHOLD = 0.40 # VGG-Face typical threshold
+FACE_MATCH_THRESHOLD = 0.68 # VGG-Face typical threshold
 PRE_ROLL_SECONDS = 5
 POST_ROLL_SECONDS = 5
 
