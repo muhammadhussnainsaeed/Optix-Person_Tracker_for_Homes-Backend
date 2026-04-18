@@ -3,6 +3,7 @@
 venv/
 env/
 media/events/
+ai_engine/
 # Python Cache (These are the compiled files making your untracked list huge)
 __pycache__/
 *.py[cod]

@@ -6,6 +6,23 @@ import uuid
 import cv2
 import os
 
+def log_object_interaction(event_log_id: int, object_name: str):
+    """Logs an object movement using raw SQL linked to the main event."""
+    try:
+        with SessionLocal() as db:
+            query = text("""
+                INSERT INTO object_interactions (event_log_id, object_name)
+                VALUES (:event_log_id, :object_name)
+            """)
+            db.execute(query, {
+                "event_log_id": event_log_id,
+                "object_name": object_name
+            })
+            db.commit()
+            print(f"📝 [DB] Logged Object Movement: {object_name} during Event {event_log_id}")
+    except Exception as e:
+        print(f"❌ [DB] Error logging object interaction: {e}")
+
 def log_event_start(user_id: str, camera_id: str, person_id: str, event_type: str, video_path: str) -> str:
     db: Session = SessionLocal()
     #event_id = str(uuid.uuid4())
